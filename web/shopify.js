@@ -20,8 +20,8 @@ dotenv.config();
  *   "Basic"   $10/mo -> tier "premium"   -> PREMIUM_PLAN
  *   "Premium" $100/mo -> tier "unlimited" -> UNLIMITED_PLAN
  */
-export const PREMIUM_PLAN = process.env.BASIC_PLAN_NAME || "Basic Plan"; // $10/mo
-export const UNLIMITED_PLAN = process.env.PREMIUM_PLAN_NAME || "Premium Plan"; // $100/mo
+export const PREMIUM_PLAN = process.env.BASIC_PLAN_NAME || "Basic"; // $10/mo
+export const UNLIMITED_PLAN = process.env.PREMIUM_PLAN_NAME || "Premium"; // $30/mo
 
 const billingConfig = {
   [PREMIUM_PLAN]: {
@@ -30,7 +30,7 @@ const billingConfig = {
     interval: BillingInterval.Every30Days,
   },
   [UNLIMITED_PLAN]: {
-    amount: 100,
+    amount: 30,
     currencyCode: "USD",
     interval: BillingInterval.Every30Days,
   },

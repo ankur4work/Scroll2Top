@@ -45,7 +45,7 @@ export default function Pricing() {
   const planPrices = {
     free: "0.00",
     basic: "10.00",
-    premium: "100.00",
+    premium: "30.00",
   };
 
   // Map backend tiers ➜ UI plans
@@ -593,7 +593,7 @@ export default function Pricing() {
                       lineHeight: 1.1,
                     }}
                   >
-                    $100
+                    $30
                   </div>
                   <div style={{ fontSize: 12, color: "#6B7280" }}>
                     Full control and visibility across your store
