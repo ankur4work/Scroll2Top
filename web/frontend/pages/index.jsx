@@ -47,7 +47,7 @@ export default function HomePage() {
   // --- Prices map ---
   const planPrices = {
     basic: "10.00",
-    premium: "100.00",
+    premium: "30.00",
   };
 
   const planLabels = {
@@ -246,7 +246,7 @@ export default function HomePage() {
                             ? "Free"
                             : plan === "basic"
                             ? "Basic – $10/mo"
-                            : "Premium – $100/mo"}
+                            : "Premium – $30/mo"}
                         </Button>
                       ))}
                     </ButtonGroup>

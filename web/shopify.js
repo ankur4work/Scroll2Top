@@ -18,7 +18,7 @@ dotenv.config();
  *
  * UI (Pricing.jsx) -> backend tier -> constant here:
  *   "Basic"   $10/mo -> tier "premium"   -> PREMIUM_PLAN
- *   "Premium" $100/mo -> tier "unlimited" -> UNLIMITED_PLAN
+ *   "Premium" $30/mo -> tier "unlimited" -> UNLIMITED_PLAN
  */
 export const PREMIUM_PLAN = process.env.BASIC_PLAN_NAME || "Basic"; // $10/mo
 export const UNLIMITED_PLAN = process.env.PREMIUM_PLAN_NAME || "Premium"; // $30/mo

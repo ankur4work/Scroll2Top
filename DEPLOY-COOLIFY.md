@@ -101,7 +101,7 @@ changes need no deploy and no review.
 
 - The dev delivered a **sanitized** copy: MongoDB connection, billing plans, the
   API secret, and an external analytics URL were blanked. Billing has been
-  rebuilt from the pricing UI ($0 Free / $10 Basic / $100 Premium); **confirm the
+  rebuilt from the pricing UI ($0 Free / $10 Basic / $30 Premium); **confirm the
   plan names** (step 6/7).
 - `mongodb` and `express` were added to `web/package.json` (were relied on
   transitively). The unused SQLite analytics import was disabled to avoid a
