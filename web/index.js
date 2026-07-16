@@ -219,30 +219,42 @@ app.get("/api/cancelSubscription", async (req, res) => {
       const subscriptionStatus = await cancelSubscription(session);
       console.log(`✅ ${session.shop} subscription cancelled. Status: ${subscriptionStatus}`);
 
-      // Remove app-owned metafield if present
-      const client = new shopify.api.clients.Graphql({ session });
-      const currentInstallations = await client.request(
-        CURRENT_APP_INSTALLATION,
-        { variables: { namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
-      );
-
-      const installation = gqlData(currentInstallations)?.currentAppInstallation;
-      const ownerId = installation?.id;
-      const metafield = installation?.metafield;
-
-      if (ownerId && metafield) {
-        console.log(`🗑️ Removing appOwnedMetafield for shop: ${session.shop}`);
-        const deleteResp = await client.request(
-          APP_OWNED_METAFIELD_DELETE,
-          { variables: { ownerId, namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
+      // Remove app-owned metafield if present. Best-effort: the subscription is
+      // already cancelled at this point, so metafield cleanup must never make
+      // the cancel endpoint fail.
+      try {
+        const client = new shopify.api.clients.Graphql({ session });
+        const currentInstallations = await client.request(
+          CURRENT_APP_INSTALLATION,
+          { variables: { namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
         );
 
-        const delErrors = gqlData(deleteResp)?.appOwnedMetafieldDelete?.userErrors || [];
-        if (delErrors.length) {
-          console.error("❌ Failed to delete metafield:", delErrors);
-        } else {
-          console.log(`✅ Metafield deleted successfully for shop: ${session.shop}`);
+        const installation = gqlData(currentInstallations)?.currentAppInstallation;
+        const ownerId = installation?.id;
+        const metafield = installation?.metafield;
+
+        if (ownerId && metafield) {
+          console.log(`🗑️ Removing appOwnedMetafield for shop: ${session.shop}`);
+          const deleteResp = await client.request(METAFIELDS_DELETE, {
+            variables: {
+              metafields: [
+                { ownerId, namespace: Custom_app, key: PREMIUM_PLAN_KEY },
+              ],
+            },
+          });
+
+          const delErrors = gqlData(deleteResp)?.metafieldsDelete?.userErrors || [];
+          if (delErrors.length) {
+            console.error("❌ Failed to delete metafield:", delErrors);
+          } else {
+            console.log(`✅ Metafield deleted successfully for shop: ${session.shop}`);
+          }
         }
+      } catch (mfErr) {
+        console.error(
+          "⚠️ Metafield cleanup failed (subscription already cancelled):",
+          mfErr?.message || mfErr
+        );
       }
 
       // Downgrade after cancel
@@ -452,11 +464,13 @@ const CREATE_APP_DATA_METAFIELD = `
   }
 `;
 
-// Delete app-owned metafield (correct for app-owned metafields)
-const APP_OWNED_METAFIELD_DELETE = `
-  mutation appOwnedMetafieldDelete($ownerId: ID!, $namespace: String!, $key: String!) {
-    appOwnedMetafieldDelete(ownerId: $ownerId, namespace: $namespace, key: $key) {
-      deletedId
+// Delete an app-owned metafield by identifier (ownerId + namespace + key).
+// `metafieldsDelete` is the valid Admin API mutation; `appOwnedMetafieldDelete`
+// does not exist and previously threw, making cancel appear to fail.
+const METAFIELDS_DELETE = `
+  mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { key namespace ownerId }
       userErrors { field message }
     }
   }
