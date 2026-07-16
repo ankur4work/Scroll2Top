@@ -48,7 +48,11 @@ app.post(
 // PREMIUM_PLAN and UNLIMITED_PLAN are imported from ./shopify.js (single source of truth)
 const Custom_app = "custom";
 const PREMIUM_PLAN_KEY = "scroll-2-top-premium";
-const IS_TEST = false;
+// Billing test mode. When BILLING_TEST=true (Coolify env), billing.request
+// creates *test* charges (no real money) — use during App Store review / QA.
+// Default false = real production charges. Plan detection (getPlanTier) is
+// test-flag agnostic, so switching this does not drop existing paid merchants.
+const IS_TEST = process.env.BILLING_TEST === "true";
 const APP_NAME = "Scroll 2 Top";
 const HTTP_STATUS = { OK: 200, BAD_REQUEST: 400, UNAUTHORIZED: 401, INTERNAL_SERVER_ERROR: 500 };
 
