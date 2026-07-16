@@ -89,22 +89,35 @@ app.get("/api/scroll-to-top/hasSubscription", async (req, res) => {
 });
 
 /* ---------------------- Subscription Utilities ---------------------- */
+
+// Read the shop's active app subscriptions directly.
+//
+// We intentionally do NOT use shopify.api.billing.check() here: in
+// @shopify/shopify-api v11 it only counts subscriptions whose `test` flag
+// matches the `isTest` argument. Shopify forces every charge on a development
+// store to be a *test* charge, so during App Store review an approved paid plan
+// (test: true) is filtered out by billing.check({ isTest: false }) and the app
+// wrongly reports "free". Matching by plan name + ACTIVE status is correct for
+// both real (production) and test (dev/review) charges.
+// Unwrap a GraphQL client response to its `data` payload. In @shopify/shopify-api
+// v11 client.request() returns { data, extensions, headers }; older/other call
+// styles nest it under .body.data. Tolerate both so downstream reads don't
+// silently see `undefined`.
+const gqlData = (resp) => resp?.data ?? resp?.body?.data ?? resp;
+
+async function getActiveSubscriptions(session) {
+  const client = new shopify.api.clients.Graphql({ session });
+  const resp = await client.request(ACTIVE_SUBSCRIPTIONS_QUERY);
+  return gqlData(resp)?.currentAppInstallation?.activeSubscriptions ?? [];
+}
+
 async function getPlanTier(session) {
   try {
-    const hasUnlimited = await shopify.api.billing.check({
-      session,
-      plans: [UNLIMITED_PLAN],
-      isTest: IS_TEST,
-    });
-    if (hasUnlimited) return "unlimited";
-
-    const hasPremium = await shopify.api.billing.check({
-      session,
-      plans: [PREMIUM_PLAN],
-      isTest: IS_TEST,
-    });
-    if (hasPremium) return "premium";
-
+    const active = (await getActiveSubscriptions(session)).filter(
+      (s) => s?.status === "ACTIVE"
+    );
+    if (active.some((s) => s?.name === UNLIMITED_PLAN)) return "unlimited";
+    if (active.some((s) => s?.name === PREMIUM_PLAN)) return "premium";
     return "free";
   } catch (error) {
     console.error("Error checking plan tier:", error);
@@ -161,11 +174,10 @@ app.get("/api/createSubscription", async (req, res) => {
     const planParam = (req.query.plan || "").toString().toLowerCase();
     const planName = planParam === "unlimited" ? UNLIMITED_PLAN : PREMIUM_PLAN;
 
-    const hasPayment = await shopify.api.billing.check({
-      session,
-      plans: [planName],
-      isTest: IS_TEST,
-    });
+    const active = (await getActiveSubscriptions(session)).filter(
+      (s) => s?.status === "ACTIVE"
+    );
+    const hasPayment = active.some((s) => s?.name === planName);
 
     if (hasPayment) {
    
@@ -194,11 +206,10 @@ app.get("/api/cancelSubscription", async (req, res) => {
   try {
     const session = res.locals.shopify.session;
 
-    const hasPremium = await shopify.api.billing.check({ session, plans: [PREMIUM_PLAN], isTest: IS_TEST });
-    const hasUnlimited = await shopify.api.billing.check({ session, plans: [UNLIMITED_PLAN], isTest: IS_TEST });
+    const tier = await getPlanTier(session);
 
-    if (hasPremium || hasUnlimited) {
-      const planToCancel = hasUnlimited ? UNLIMITED_PLAN : PREMIUM_PLAN;
+    if (tier !== "free") {
+      const planToCancel = tier === "unlimited" ? UNLIMITED_PLAN : PREMIUM_PLAN;
   
 
       const subscriptionStatus = await cancelSubscription(session);
@@ -211,7 +222,7 @@ app.get("/api/cancelSubscription", async (req, res) => {
         { variables: { namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
       );
 
-      const installation = currentInstallations?.currentAppInstallation;
+      const installation = gqlData(currentInstallations)?.currentAppInstallation;
       const ownerId = installation?.id;
       const metafield = installation?.metafield;
 
@@ -222,7 +233,7 @@ app.get("/api/cancelSubscription", async (req, res) => {
           { variables: { ownerId, namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
         );
 
-        const delErrors = deleteResp?.appOwnedMetafieldDelete?.userErrors || [];
+        const delErrors = gqlData(deleteResp)?.appOwnedMetafieldDelete?.userErrors || [];
         if (delErrors.length) {
           console.error("❌ Failed to delete metafield:", delErrors);
         } else {
@@ -264,7 +275,7 @@ app.get("/api/hasActiveSubscription", async (_req, res) => {
       { variables: { namespace: Custom_app, key: PREMIUM_PLAN_KEY } }
     );
 
-    const installation = currentInstallations?.currentAppInstallation;
+    const installation = gqlData(currentInstallations)?.currentAppInstallation;
     const ownerId = installation?.id;
     const existing = installation?.metafield;
 
@@ -281,7 +292,7 @@ app.get("/api/hasActiveSubscription", async (_req, res) => {
         }
       );
 
-      const createErrors = createResp?.metafieldsSet?.userErrors || [];
+      const createErrors = gqlData(createResp)?.metafieldsSet?.userErrors || [];
       if (createErrors.length) {
         console.error("❌ Failed to add metafield:", createErrors);
       } else {
@@ -396,6 +407,21 @@ app.use("/*", shopify.ensureInstalledOnShop(), async (_req, res) => {
 app.listen(PORT, () => console.log(`🚀 Server running  on http://localhost:${PORT}`));
 
 /* --------------------------- GraphQL Queries --------------------------- */
+
+// All active app subscriptions for the shop. `test` is selected for logging/
+// debugging only — plan detection matches on name + ACTIVE status and ignores
+// it so dev/review (test) charges count the same as production charges.
+const ACTIVE_SUBSCRIPTIONS_QUERY = `
+  query currentActiveSubscriptions {
+    currentAppInstallation {
+      activeSubscriptions {
+        name
+        status
+        test
+      }
+    }
+  }
+`;
 
 // Read app-owned metafield on the app installation
 const CURRENT_APP_INSTALLATION = `
